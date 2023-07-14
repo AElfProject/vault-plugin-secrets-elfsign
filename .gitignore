@@ -1,6 +1,6 @@
 coverage.txt
 **/debug.test
 # binary from "make" build
-ethsign
+elfsign
 # binary from "go build"
-vault-plugin-secrets-ethsign
+vault-plugin-secrets-elfsign
