@@ -18,7 +18,10 @@ import (
 	"bytes"
 	"context"
 	"crypto/ecdsa"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"github.com/AElfProject/vault-plugin-secrets-elfsign/base58"
 	"math/big"
 	"regexp"
 
@@ -29,7 +32,6 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/hashicorp/vault/sdk/framework"
 	"github.com/hashicorp/vault/sdk/logical"
-	"golang.org/x/crypto/sha3"
 )
 
 const (
@@ -70,12 +72,12 @@ func (b *backend) createAccount(ctx context.Context, req *logical.Request, data 
 	var err error
 
 	if keyInput != "" {
-    re := regexp.MustCompile("[0-9a-fA-F]{64}$")
-    key := re.FindString(keyInput)
-    if key == "" {
-      b.Logger().Error("Input private key did not parse successfully", "privateKey", keyInput)
-      return nil, fmt.Errorf("privateKey must be a 32-byte hexidecimal string")
-    }
+		re := regexp.MustCompile("[0-9a-fA-F]{64}$")
+		key := re.FindString(keyInput)
+		if key == "" {
+			b.Logger().Error("Input private key did not parse successfully", "privateKey", keyInput)
+			return nil, fmt.Errorf("privateKey must be a 32-byte hexidecimal string")
+		}
 		privateKey, err = crypto.HexToECDSA(key)
 		if err != nil {
 			b.Logger().Error("Error reconstructing private key from input hex", "error", err)
@@ -93,11 +95,10 @@ func (b *backend) createAccount(ctx context.Context, req *logical.Request, data 
 	publicKey := privateKey.Public()
 	publicKeyECDSA, _ := publicKey.(*ecdsa.PublicKey)
 	publicKeyBytes := crypto.FromECDSAPub(publicKeyECDSA)
-	publicKeyString := hexutil.Encode(publicKeyBytes)[4:]
-
-	hash := sha3.NewLegacyKeccak256()
-	hash.Write(publicKeyBytes[1:])
-	address := hexutil.Encode(hash.Sum(nil)[12:])
+	sum1 := sha256.Sum256(publicKeyBytes)
+	sum2 := sha256.Sum256(sum1[:])
+	address := base58.EncodeCheck(sum2[:])
+	publicKeyString := hex.EncodeToString(publicKeyBytes)
 
 	accountPath := fmt.Sprintf("accounts/%s", address)
 
@@ -177,15 +178,19 @@ func (b *backend) deleteAccount(ctx context.Context, req *logical.Request, data 
 
 func (b *backend) retrieveAccount(ctx context.Context, req *logical.Request, address string) (*Account, error) {
 	var path string
-	matched, err := regexp.MatchString("^(0x)?[0-9a-fA-F]{40}$", address)
+	matched, err := regexp.MatchString("^[123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]{49,50}$", address)
 	if !matched || err != nil {
 		b.Logger().Error("Failed to retrieve the account, malformatted account address", "address", address, "error", err)
 		return nil, fmt.Errorf("Failed to retrieve the account, malformatted account address")
-	} else {
+	}
+
+	if _, err = base58.DecodeCheck(address); err != nil {
+		b.Logger().Error("Failed to retrieve the account, invalid account address", "address", address, "error", err)
+		return nil, fmt.Errorf("Failed to retrieve the account, invalid account address")
+	}
+
+	{
 		// make sure the address has the "0x prefix"
-		if address[:2] != "0x" {
-			address = "0x" + address
-		}
 		path = fmt.Sprintf("accounts/%s", address)
 		entry, err := req.Storage.Get(ctx, path)
 		if err != nil {
