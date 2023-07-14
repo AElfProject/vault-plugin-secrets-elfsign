@@ -1,4 +1,4 @@
-module github.com/kaleido-io/vault-plugin-secrets-ethsign
+module github.com/AElfProject/vault-plugin-secrets-elfsign
 
 go 1.16
 

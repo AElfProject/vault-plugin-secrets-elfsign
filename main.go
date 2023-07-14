@@ -15,12 +15,12 @@
 package main
 
 import (
+	"github.com/AElfProject/vault-plugin-secrets-elfsign/backend"
 	"log"
 	"os"
 
 	"github.com/hashicorp/vault/api"
 	"github.com/hashicorp/vault/sdk/plugin"
-	"github.com/kaleido-io/vault-plugin-secrets-ethsign/backend"
 )
 
 func main() {
