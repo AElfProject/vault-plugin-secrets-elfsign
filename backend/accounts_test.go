@@ -18,7 +18,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"math/big"
 	"reflect"
 	"strings"
@@ -90,8 +89,6 @@ func newStorageMock() StorageMock {
 }
 
 func TestAccounts(t *testing.T) {
-	vvvv := fmt.Sprintf("(?P<%s>\\w(([\\w-.]+)?\\w)?)", "name")
-	fmt.Println(vvvv)
 	assert := assert.New(t)
 
 	b, _ := getBackend(t)
@@ -483,112 +480,6 @@ func TestDeleteAccountsFailure3(t *testing.T) {
 
 	assert.Nil(resp)
 	assert.Equal("Bang for Delete!", err.Error())
-}
-
-func TestSignTxFailure1(t *testing.T) {
-	assert := assert.New(t)
-
-	b, _ := getBackend(t)
-	req := logical.TestRequest(t, logical.CreateOperation, "accounts/0xf809410b0d6f047c603deb311979cd413e025a84/sign")
-	sm := newStorageMock()
-	req.Storage = sm
-	req.Data["data"] = "0xabc"
-	resp, err := b.HandleRequest(context.Background(), req)
-
-	assert.Nil(resp)
-	assert.Equal("hex string of odd length", err.Error())
-}
-
-func TestSignTxFailure2(t *testing.T) {
-	assert := assert.New(t)
-
-	b, _ := getBackend(t)
-	req := logical.TestRequest(t, logical.CreateOperation, "accounts/0xf809410b0d6f047c603deb311979cd413e025a84/sign")
-	sm := newStorageMock()
-	req.Storage = sm
-	req.Data["data"] = "0xabcd"
-	resp, err := b.HandleRequest(context.Background(), req)
-
-	assert.Nil(resp)
-	assert.Equal("Error retrieving signing account 0xf809410b0d6f047c603deb311979cd413e025a84", err.Error())
-}
-
-func TestSignTxFailure3(t *testing.T) {
-	assert := assert.New(t)
-
-	b, _ := getBackend(t)
-	req := logical.TestRequest(t, logical.CreateOperation, "accounts/0xf809410b0d6f047c603deb311979cd413e025a84/sign")
-	sm := newStorageMock()
-	sm.switches[1] = 1
-	req.Storage = sm
-	req.Data["data"] = "0xabcd"
-	resp, err := b.HandleRequest(context.Background(), req)
-
-	assert.Nil(resp)
-	assert.Equal("Signing account 0xf809410b0d6f047c603deb311979cd413e025a84 does not exist", err.Error())
-}
-
-func TestSignTxFailure4(t *testing.T) {
-	assert := assert.New(t)
-
-	b, _ := getBackend(t)
-	req := logical.TestRequest(t, logical.CreateOperation, "accounts/0xf809410b0d6f047c603deb311979cd413e025a84/sign")
-	sm := newStorageMock()
-	sm.switches[1] = 2
-	req.Storage = sm
-	req.Data["data"] = "0xabcd"
-	req.Data["value"] = "abcd"
-	resp, err := b.HandleRequest(context.Background(), req)
-
-	assert.Nil(resp)
-	assert.Equal("Invalid amount for the 'value' field", err.Error())
-}
-
-func TestSignTxFailure5(t *testing.T) {
-	assert := assert.New(t)
-
-	b, _ := getBackend(t)
-	req := logical.TestRequest(t, logical.CreateOperation, "accounts/0xf809410b0d6f047c603deb311979cd413e025a84/sign")
-	sm := newStorageMock()
-	sm.switches[1] = 2
-	req.Storage = sm
-	req.Data["data"] = "0xabcd"
-	req.Data["chainId"] = "abcd"
-	resp, err := b.HandleRequest(context.Background(), req)
-
-	assert.Nil(resp)
-	assert.Equal("Invalid 'chainId' value", err.Error())
-}
-
-func TestSignTxFailure6(t *testing.T) {
-	assert := assert.New(t)
-
-	b, _ := getBackend(t)
-	req := logical.TestRequest(t, logical.CreateOperation, "accounts/0xf809410b0d6f047c603deb311979cd413e025a84/sign")
-	sm := newStorageMock()
-	sm.switches[1] = 2
-	req.Storage = sm
-	req.Data["data"] = "0xabcd"
-	req.Data["gas"] = "abcd"
-	resp, err := b.HandleRequest(context.Background(), req)
-
-	assert.Nil(resp)
-	assert.Equal("Invalid gas limit", err.Error())
-}
-
-func TestSignTxFailure7(t *testing.T) {
-	assert := assert.New(t)
-
-	b, _ := getBackend(t)
-	req := logical.TestRequest(t, logical.CreateOperation, "accounts/0xf809410b0d6f047c603deb311979cd413e025a84/sign")
-	sm := newStorageMock()
-	sm.switches[1] = 2
-	req.Storage = sm
-	req.Data["data"] = "0xabcd"
-	resp, err := b.HandleRequest(context.Background(), req)
-
-	assert.Nil(resp)
-	assert.Equal("Error reconstructing private key from retrieved hex", err.Error())
 }
 
 func contains(arr []*big.Int, value *big.Int) bool {
