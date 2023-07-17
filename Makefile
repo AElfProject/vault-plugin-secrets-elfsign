@@ -7,10 +7,13 @@ all: build test
 test: deps
 		$(VGO) test  ./... -cover -coverprofile=coverage.txt -covermode=atomic
 elfsign: ${SRC_GOFILES}
+		mkdir -p build/bin
 		$(VGO) build -o ${BINARY_NAME} -ldflags "-X main.buildDate=`date -u +\"%Y-%m-%dT%H:%M:%SZ\"` -X main.buildVersion=$(BUILD_VERSION)" -tags=prod -v
+		mv elfsign build/bin/
 build: elfsign
-clean: 
+clean:
 		$(VGO) clean
 		rm -f ${BINARY_NAME}
+		rm -rf build
 deps:
 		$(VGO) get

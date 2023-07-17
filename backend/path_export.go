@@ -23,3 +23,22 @@ func pathExport(b *backend) *framework.Path {
 		},
 	}
 }
+
+func pathExportPassword(b *backend) *framework.Path {
+	return &framework.Path{
+		Pattern:      "export/passwords/" + framework.GenericNameRegex("name"),
+		HelpSynopsis: "Export a password",
+		HelpDescription: `
+
+    GET - return the account by the name with the private key
+
+    `,
+		Fields: map[string]*framework.FieldSchema{
+			"name": &framework.FieldSchema{Type: framework.TypeString},
+		},
+		ExistenceCheck: b.pathExistenceCheck,
+		Callbacks: map[logical.Operation]framework.OperationFunc{
+			logical.ReadOperation: b.exportPassword,
+		},
+	}
+}

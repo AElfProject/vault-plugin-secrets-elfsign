@@ -36,11 +36,18 @@ type Account struct {
 	PublicKey  string `json:"public_key"`
 }
 
+// AccountPassword is a password for the keystore
+type AccountPassword struct {
+	Address  string `json:"address"`
+	Password string `json:"password"`
+}
+
 func paths(b *backend) []*framework.Path {
 	return []*framework.Path{
 		pathCreateAndList(b),
 		pathReadAndDelete(b),
 		pathExport(b),
+		pathExportPassword(b),
 	}
 }
 
@@ -88,6 +95,20 @@ func (b *backend) createAccount(ctx context.Context, req *logical.Request, data 
 	sum2 := sha256.Sum256(sum1[:])
 	address := base58.EncodeCheck(sum2[:])
 	publicKeyString := hex.EncodeToString(publicKeyBytes)
+
+	passwordPath := fmt.Sprintf("passwords/%s", address)
+
+	passwordJSON := &AccountPassword{
+		address,
+		"abcd",
+	}
+
+	pEntry, _ := logical.StorageEntryJSON(passwordPath, passwordJSON)
+	err = req.Storage.Put(ctx, pEntry)
+	if err != nil {
+		b.Logger().Error("Failed to save the new account to storage", "error", err)
+		return nil, err
+	}
 
 	accountPath := fmt.Sprintf("accounts/%s", address)
 
@@ -148,6 +169,25 @@ func (b *backend) exportAccount(ctx context.Context, req *logical.Request, data 
 	}, nil
 }
 
+func (b *backend) exportPassword(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
+	address := data.Get("name").(string)
+	b.Logger().Info("Retrieving account for address", "address", address)
+	account, err := b.retrievePassword(ctx, req, address)
+	if err != nil {
+		return nil, err
+	}
+	if account == nil {
+		return nil, fmt.Errorf("Account does not exist")
+	}
+
+	return &logical.Response{
+		Data: map[string]interface{}{
+			"address":  account.Address,
+			"password": account.Password,
+		},
+	}, nil
+}
+
 func (b *backend) deleteAccount(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
 	address := data.Get("name").(string)
 	account, err := b.retrieveAccount(ctx, req, address)
@@ -166,34 +206,59 @@ func (b *backend) deleteAccount(ctx context.Context, req *logical.Request, data 
 }
 
 func (b *backend) retrieveAccount(ctx context.Context, req *logical.Request, address string) (*Account, error) {
-	var path string
+
+	if err := b.validateAddress(address); err != nil {
+		return nil, err
+	}
+
+	path := fmt.Sprintf("accounts/%s", address)
+	entry, err := req.Storage.Get(ctx, path)
+	if err != nil {
+		b.Logger().Error("Failed to retrieve the account by address", "path", path, "error", err)
+		return nil, err
+	}
+	if entry == nil {
+		// could not find the corresponding key for the address
+		return nil, nil
+	}
+	var account Account
+	_ = entry.DecodeJSON(&account)
+	return &account, nil
+}
+
+func (b *backend) retrievePassword(ctx context.Context, req *logical.Request, address string) (*AccountPassword, error) {
+
+	if err := b.validateAddress(address); err != nil {
+		return nil, err
+	}
+
+	path := fmt.Sprintf("passwords/%s", address)
+	entry, err := req.Storage.Get(ctx, path)
+	if err != nil {
+		b.Logger().Error("Failed to retrieve the account by address", "path", path, "error", err)
+		return nil, err
+	}
+	if entry == nil {
+		// could not find the corresponding key for the address
+		return nil, nil
+	}
+	var accountPassword AccountPassword
+	_ = entry.DecodeJSON(&accountPassword)
+	return &accountPassword, nil
+}
+
+func (b *backend) validateAddress(address string) error {
 	matched, err := regexp.MatchString("^[123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]{49,50}$", address)
 	if !matched || err != nil {
 		b.Logger().Error("Failed to retrieve the account, malformatted account address", "address", address, "error", err)
-		return nil, fmt.Errorf("Failed to retrieve the account, malformatted account address")
+		return fmt.Errorf("Failed to retrieve the account, malformatted account address")
 	}
 
 	if _, err = base58.DecodeCheck(address); err != nil {
 		b.Logger().Error("Failed to retrieve the account, invalid account address", "address", address, "error", err)
-		return nil, fmt.Errorf("Failed to retrieve the account, invalid account address")
+		return fmt.Errorf("Failed to retrieve the account, invalid account address")
 	}
-
-	{
-		// make sure the address has the "0x prefix"
-		path = fmt.Sprintf("accounts/%s", address)
-		entry, err := req.Storage.Get(ctx, path)
-		if err != nil {
-			b.Logger().Error("Failed to retrieve the account by address", "path", path, "error", err)
-			return nil, err
-		}
-		if entry == nil {
-			// could not find the corresponding key for the address
-			return nil, nil
-		}
-		var account Account
-		_ = entry.DecodeJSON(&account)
-		return &account, nil
-	}
+	return nil
 }
 
 func ZeroKey(k *ecdsa.PrivateKey) {
