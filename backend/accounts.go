@@ -23,7 +23,6 @@ import (
 	"github.com/AElfProject/vault-plugin-secrets-elfsign/base58"
 	"regexp"
 
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/hashicorp/vault/sdk/framework"
 	"github.com/hashicorp/vault/sdk/logical"
@@ -31,9 +30,8 @@ import (
 
 // Account is an Ethereum account
 type Account struct {
-	Address    string `json:"address"`
-	PrivateKey string `json:"private_key"`
-	PublicKey  string `json:"public_key"`
+	KeyStore  *encryptedKeyJSONV3 `json:"key_store"`
+	PublicKey string              `json:"public_key"`
 }
 
 // AccountPassword is a password for the keystore
@@ -64,7 +62,6 @@ func (b *backend) listAccounts(ctx context.Context, req *logical.Request, data *
 func (b *backend) createAccount(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
 	keyInput := data.Get("privateKey").(string)
 	var privateKey *ecdsa.PrivateKey
-	var privateKeyString string
 	var err error
 
 	if keyInput != "" {
@@ -79,11 +76,8 @@ func (b *backend) createAccount(ctx context.Context, req *logical.Request, data 
 			b.Logger().Error("Error reconstructing private key from input hex", "error", err)
 			return nil, fmt.Errorf("Error reconstructing private key from input hex")
 		}
-		privateKeyString = key
 	} else {
 		privateKey, _ = crypto.GenerateKey()
-		privateKeyBytes := crypto.FromECDSA(privateKey)
-		privateKeyString = hexutil.Encode(privateKeyBytes)[2:]
 	}
 
 	defer ZeroKey(privateKey)
@@ -96,11 +90,17 @@ func (b *backend) createAccount(ctx context.Context, req *logical.Request, data 
 	address := base58.EncodeCheck(sum2[:])
 	publicKeyString := hex.EncodeToString(publicKeyBytes)
 
+	ks, auth, err := ToKeyStore(privateKey)
+	if err != nil {
+		b.Logger().Error("Failed to get the keystore", "error", err)
+		return nil, err
+	}
+
 	passwordPath := fmt.Sprintf("passwords/%s", address)
 
 	passwordJSON := &AccountPassword{
 		address,
-		"abcd",
+		*auth,
 	}
 
 	pEntry, _ := logical.StorageEntryJSON(passwordPath, passwordJSON)
@@ -109,13 +109,10 @@ func (b *backend) createAccount(ctx context.Context, req *logical.Request, data 
 		b.Logger().Error("Failed to save the new account to storage", "error", err)
 		return nil, err
 	}
-
 	accountPath := fmt.Sprintf("accounts/%s", address)
-
 	accountJSON := &Account{
-		Address:    address,
-		PrivateKey: privateKeyString,
-		PublicKey:  publicKeyString,
+		KeyStore:  ks,
+		PublicKey: publicKeyString,
 	}
 
 	entry, _ := logical.StorageEntryJSON(accountPath, accountJSON)
@@ -127,7 +124,7 @@ func (b *backend) createAccount(ctx context.Context, req *logical.Request, data 
 
 	return &logical.Response{
 		Data: map[string]interface{}{
-			"address": accountJSON.Address,
+			"address": accountJSON.KeyStore.Address,
 		},
 	}, nil
 }
@@ -145,7 +142,7 @@ func (b *backend) readAccount(ctx context.Context, req *logical.Request, data *f
 
 	return &logical.Response{
 		Data: map[string]interface{}{
-			"address": account.Address,
+			"address": account.KeyStore.Address,
 		},
 	}, nil
 }
@@ -163,8 +160,7 @@ func (b *backend) exportAccount(ctx context.Context, req *logical.Request, data 
 
 	return &logical.Response{
 		Data: map[string]interface{}{
-			"address":    account.Address,
-			"privateKey": account.PrivateKey,
+			"account": account,
 		},
 	}, nil
 }
@@ -198,7 +194,7 @@ func (b *backend) deleteAccount(ctx context.Context, req *logical.Request, data 
 	if account == nil {
 		return nil, nil
 	}
-	if err := req.Storage.Delete(ctx, fmt.Sprintf("accounts/%s", account.Address)); err != nil {
+	if err := req.Storage.Delete(ctx, fmt.Sprintf("accounts/%s", account.KeyStore.Address)); err != nil {
 		b.Logger().Error("Failed to delete the account from storage", "address", address, "error", err)
 		return nil, err
 	}

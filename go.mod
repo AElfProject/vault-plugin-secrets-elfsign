@@ -4,6 +4,7 @@ go 1.16
 
 require (
 	github.com/ethereum/go-ethereum v1.10.17
+	github.com/google/uuid v1.2.0
 	github.com/hashicorp/go-hclog v0.8.0
 	github.com/hashicorp/vault/api v1.0.4
 	github.com/hashicorp/vault/sdk v0.1.13
